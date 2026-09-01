@@ -1,0 +1,18 @@
+{
+  "notif_001": {
+    "title": "Critical temperature in Brooding Area 1",
+    "body": "Reading reached 46°C, above the safe range.",
+    "type": "Temperature",
+    "timestamp": 1771987320000,
+    "unread": true,
+    "iconColor": "#E53935",
+    "iconBg": "#FFEBEE"
+  },
+  "notif_002": {
+    "title": "New Piglet Born",
+    "body": "A new record was added for Sow #12.",
+    "type": "Added Record",
+    "timestamp": 1771983720000,
+    "unread": true
+  }
+}
