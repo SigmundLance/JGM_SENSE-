@@ -12,8 +12,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { getTempStatus, OPTIMAL_MAX, OPTIMAL_MIN, TempStatus } from '../../constants/temperature';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
+
+const STATUS_STYLES: Record<TempStatus, { gradient: readonly [string, string]; dotColor: string }> = {
+  offline: { gradient: ['#C2B9BD', '#948A8E'], dotColor: '#F2EEEE' },
+  critical: { gradient: ['#FF8F6B', '#D43C4A'], dotColor: '#FFECEC' },
+  fault: { gradient: ['#FFCF6B', '#F2994A'], dotColor: '#FFF6E6' },
+  cooling: { gradient: ['#7FB8FC', '#2F6FED'], dotColor: '#EAF3FF' },
+  optimal: { gradient: ['#7FD8A3', '#3FA66E'], dotColor: '#EAFFF2' },
+  warming: { gradient: ['#FFCF6B', '#F2994A'], dotColor: '#FFF6E6' },
+};
 
 const BROODING_AREAS = [
   { id: '1', name: 'Brooding Area 1' },
@@ -67,11 +77,14 @@ export default function TemperatureScreen() {
   }, [currentTemp, targetTemp]);
 
   const statusConfig = useMemo(() => {
-    if (currentTemp === null || currentTemp === undefined) {
+    const { status, label } = getTempStatus(currentTemp);
+    const { gradient, dotColor } = STATUS_STYLES[status];
+
+    if (status === 'offline') {
       return {
-        label: 'Offline',
-        gradient: ['#C2B9BD', '#948A8E'] as const,
-        dotColor: '#F2EEEE',
+        label,
+        gradient,
+        dotColor,
         humidityDisplay: '--%',
         tempDisplay: '--°C',
         updatedText: 'Sensor offline',
@@ -81,46 +94,12 @@ export default function TemperatureScreen() {
 
     const formattedTemp =
       typeof currentTemp === 'number' ? currentTemp.toFixed(1) : currentTemp;
-    
     const formattedHumidity = humidity !== null && humidity !== undefined ? `${humidity}%` : '--%';
 
-    if (currentTemp <= 26) {
-      return {
-        label: 'Cooling Needed',
-        gradient: ['#7FB8FC', '#2F6FED'] as const,
-        dotColor: '#EAF3FF',
-        humidityDisplay: formattedHumidity,
-        tempDisplay: `${formattedTemp}°C`,
-        updatedText: lastUpdated,
-        isOnline: true,
-      };
-    }
-    if (currentTemp <= 37) {
-      return {
-        label: 'Optimal',
-        gradient: ['#7FD8A3', '#3FA66E'] as const,
-        dotColor: '#EAFFF2',
-        humidityDisplay: formattedHumidity,
-        tempDisplay: `${formattedTemp}°C`,
-        updatedText: lastUpdated,
-        isOnline: true,
-      };
-    }
-    if (currentTemp <= 38) {
-      return {
-        label: 'Warning High',
-        gradient: ['#FFCF6B', '#F2994A'] as const,
-        dotColor: '#FFF6E6',
-        humidityDisplay: formattedHumidity,
-        tempDisplay: `${formattedTemp}°C`,
-        updatedText: lastUpdated,
-        isOnline: true,
-      };
-    }
     return {
-      label: 'Critical',
-      gradient: ['#FF8F6B', '#D43C4A'] as const,
-      dotColor: '#FFECEC',
+      label,
+      gradient,
+      dotColor,
       humidityDisplay: formattedHumidity,
       tempDisplay: `${formattedTemp}°C`,
       updatedText: lastUpdated,
@@ -327,7 +306,7 @@ export default function TemperatureScreen() {
               </View>
               <Text style={[styles.infoLabel, { color: theme.text }]}>Safe Range</Text>
             </View>
-            <Text style={[styles.infoValue, { color: theme.text }]}>30°C – 35°C</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{OPTIMAL_MIN}°C – {OPTIMAL_MAX}°C</Text>
           </View>
 
           <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>

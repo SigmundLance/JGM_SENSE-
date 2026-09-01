@@ -14,9 +14,19 @@ import {
     View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { getTempStatus, TempStatus } from '../../constants/temperature';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
 import { auth, database } from '../../firebaseConfig';
+
+const STATUS_GRADIENTS: Record<TempStatus, readonly [string, string]> = {
+  offline: ['#C2B9BD', '#948A8E'],
+  critical: ['#FF8F6B', '#D43C4A'],
+  fault: ['#FFCF6B', '#F2994A'],
+  cooling: ['#7FB8FC', '#2F6FED'],
+  optimal: ['#7FD8A3', '#3FA66E'],
+  warming: ['#FFCF6B', '#F2994A'],
+};
 
 type CameraStatus = 'online' | 'connecting' | 'offline';
 
@@ -177,38 +187,11 @@ export default function Dashboard() {
     }, [])
   );
 
-  const getTempStatus = (temp: number | null | undefined) => {
-    if (temp === null || temp === undefined) {
-      return { 
-        label: 'OFFLINE', 
-        gradient: ['#C2B9BD', '#948A8E'] as const 
-      };
-    }
-    if (temp <= 26) {
-      return { 
-        label: 'COOLING', 
-        gradient: ['#7FB8FC', '#2F6FED'] as const 
-      };
-    }
-    if (temp <= 36) {
-      return { 
-        label: 'OPTIMAL', 
-        gradient: ['#7FD8A3', '#3FA66E'] as const 
-      };
-    }
-    if (temp <= 37) {
-      return { 
-        label: 'WARNING', 
-        gradient: ['#FFCF6B', '#F2994A'] as const 
-      };
-    }
-    return { 
-      label: 'CRITICAL', 
-      gradient: ['#FF8F6B', '#D43C4A'] as const 
-    };
+  const tempStatus = getTempStatus(currentTemp);
+  const status = {
+    label: tempStatus.label.toUpperCase(),
+    gradient: STATUS_GRADIENTS[tempStatus.status],
   };
-
-  const status = getTempStatus(currentTemp);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background || '#FFF0F3' }}>
