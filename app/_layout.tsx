@@ -5,6 +5,7 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import LoadingScreen from '../components/LoadingScreen';
 
@@ -41,6 +42,17 @@ export default function RootLayout() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
         console.log('Notification permissions not granted!');
+      }
+
+      // Android requires a channel or notifications silently fail.
+      // HIGH (not DEFAULT) is required for a heads-up banner - DEFAULT
+      // only lands quietly in the notification shade.
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Default',
+          importance: Notifications.AndroidImportance.HIGH,
+          sound: 'default',
+        });
       }
 
       // Hide native splash screen so Oinky can display

@@ -2,6 +2,8 @@ import { get, onValue, push, ref, set, update } from 'firebase/database';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { DUPLICATE_WRITE_GRACE_MS, getTempStatus, STATUS_CONFIRMATION_READINGS, TARGET_TEMP, TempStatus } from '../constants/temperature';
 import { rtdb } from '../firebaseConfig';
+import { fireLocalNotification } from '../utils/localNotifications';
+import { useNotificationPreference } from './NotificationPreferenceContext';
 
 const STATUS_NOTIFICATION_STYLE: Record<TempStatus, { iconColor: string; iconBg: string }> = {
   offline: { iconColor: '#757575', iconBg: '#EEEEEE' },
@@ -33,6 +35,7 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
   const [humidity, setHumidity] = useState<number | null>(null);
   const [targetTemp, setTargetTemp] = useState<number | null>(TARGET_TEMP);
+  const { isNotificationsEnabled } = useNotificationPreference();
 
   // Status-transition debounce state. Refs so updates don't trigger
   // re-renders or re-run the listener effect.
@@ -40,6 +43,14 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   const pendingStatus = useRef<TempStatus | null>(null);
   const pendingCount = useRef(0);
   const lastProcessedAt = useRef<number | null>(null);
+
+  // The sensor listener effect below intentionally mounts once ([]), so
+  // it can't read isNotificationsEnabled directly without going stale -
+  // this ref keeps it current without re-attaching the listener.
+  const isNotificationsEnabledRef = useRef(isNotificationsEnabled);
+  useEffect(() => {
+    isNotificationsEnabledRef.current = isNotificationsEnabled;
+  }, [isNotificationsEnabled]);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,11 +146,21 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
                     iconBg,
                   },
                   [LAST_STATUS_PATH]: status,
-                }).catch((error) => {
-                  console.error('Failed to create temperature notification:', error);
-                  // Roll back so the next confirmed reading retries.
-                  lastNotifiedStatus.current = previousNotifiedStatus;
-                });
+                })
+                  .then(() => {
+                    // Only fires once the in-app record is actually
+                    // written, so a banner can't appear without one.
+                    fireLocalNotification(
+                      isNotificationsEnabledRef.current,
+                      'Temperature Reading',
+                      `${label} — ${nextTemperature.toFixed(1)}°C`
+                    );
+                  })
+                  .catch((error) => {
+                    console.error('Failed to create temperature notification:', error);
+                    // Roll back so the next confirmed reading retries.
+                    lastNotifiedStatus.current = previousNotifiedStatus;
+                  });
               }
             }
           }

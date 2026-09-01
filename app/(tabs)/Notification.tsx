@@ -258,7 +258,15 @@ export default function NotificationScreen() {
 
         <MaterialCommunityIcons
 
-          name={item.type === 'Temperature' ? 'thermometer-alert' : item.type === 'Report' ? 'file-document' : 'bell'}
+          name={
+            item.type === 'Temperature'
+              ? 'thermometer-alert'
+              : item.type === 'Report'
+              ? 'file-document'
+              : item.type === 'override'
+              ? 'tune-variant'
+              : 'bell'
+          }
 
           size={22}
 

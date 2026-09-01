@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { NotificationPreferenceProvider } from '../../context/NotificationPreferenceContext';
 import { TemperatureProvider } from '../../context/TempContext';
 import { ThemeProvider, useTheme } from '../../context/ThemeContext';
 
@@ -102,9 +103,11 @@ function TabLayoutContent() {
 export default function TabLayout() {
   return (
     <ThemeProvider>
-      <TemperatureProvider>
-        <TabLayoutContent />
-      </TemperatureProvider>
+      <NotificationPreferenceProvider>
+        <TemperatureProvider>
+          <TabLayoutContent />
+        </TemperatureProvider>
+      </NotificationPreferenceProvider>
     </ThemeProvider>
   );
 }

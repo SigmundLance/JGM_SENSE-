@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Platform,
   SafeAreaView,
@@ -14,14 +14,13 @@ import {
   View,
 } from 'react-native';
 
+import { useNotificationPreference } from '../../context/NotificationPreferenceContext';
 import { useTheme } from '../../context/ThemeContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { isDarkModeEnabled, toggleDarkMode, theme } = useTheme();
-
-  const [isNotificationEnabled, setIsNotificationEnabled] = useState(true);
-  const toggleNotification = () => setIsNotificationEnabled((prev) => !prev);
+  const { isNotificationsEnabled, toggleNotifications } = useNotificationPreference();
 
   const [fontsLoaded] = useFonts({
     'SF-Pro-Regular': require('../../assets/images/fonts/SFPRODISPLAYREGULAR.otf'),
@@ -72,7 +71,7 @@ export default function SettingsScreen() {
           <TouchableOpacity
             style={[styles.itemRow, { borderBottomColor: dividerColor, borderBottomWidth: 1 }]}
             activeOpacity={0.8}
-            onPress={toggleNotification}
+            onPress={toggleNotifications}
           >
             <View style={styles.itemLeft}>
               <View style={[styles.iconCircle, { backgroundColor: isDarkModeEnabled ? '#3A2B1D' : '#FDF3E7' }]}>
@@ -90,8 +89,8 @@ export default function SettingsScreen() {
               trackColor={{ false: isDarkModeEnabled ? '#444444' : '#E2D5D7', true: '#E07A8B' }}
               thumbColor={'#FFFFFF'}
               ios_backgroundColor={isDarkModeEnabled ? '#444444' : '#E2D5D7'}
-              onValueChange={toggleNotification}
-              value={isNotificationEnabled}
+              onValueChange={toggleNotifications}
+              value={isNotificationsEnabled}
             />
           </TouchableOpacity>
 

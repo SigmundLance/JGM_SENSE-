@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { push, ref } from 'firebase/database';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,8 +14,15 @@ import {
   View,
 } from 'react-native';
 import { getTempStatus, OPTIMAL_MAX, OPTIMAL_MIN, TempStatus } from '../../constants/temperature';
+import { useNotificationPreference } from '../../context/NotificationPreferenceContext';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
+import { rtdb } from '../../firebaseConfig';
+import { fireLocalNotification } from '../../utils/localNotifications';
+
+// Distinct from every color used for temperature-status alerts
+// (red/critical, amber/fault, blue/cooling, green/optimal).
+const OVERRIDE_NOTIF_STYLE = { iconColor: '#7C5CFC', iconBg: '#F1EEFF' };
 
 const STATUS_STYLES: Record<TempStatus, { gradient: readonly [string, string]; dotColor: string }> = {
   offline: { gradient: ['#C2B9BD', '#948A8E'], dotColor: '#F2EEEE' },
@@ -36,6 +44,7 @@ export default function TemperatureScreen() {
   const { theme } = useTheme();
   // Extracted targetTemp and humidity from useTemp context
   const { currentTemp, humidity, targetTemp: initialTarget, updateTemperature } = useTemp();
+  const { isNotificationsEnabled } = useNotificationPreference();
 
   const [targetTemp, setTargetTemp] = useState<number>(initialTarget ?? 32);
   const [savedTargetTemp, setSavedTargetTemp] = useState<number>(initialTarget ?? 32);
@@ -118,11 +127,36 @@ export default function TemperatureScreen() {
   const confirmOverride = async () => {
     if (!hasChanges || isUpdating) return;
     setIsUpdating(true);
+    const previousTarget = savedTargetTemp;
 
     try {
       await updateTemperature(targetTemp);
       setSavedTargetTemp(targetTemp);
       setToastMessage(`Target calibrated to ${targetTemp}°C`);
+
+      // Fired immediately on confirm - independent of TempContext's
+      // sensor-status debounce, which only governs automatic readings.
+      if (previousTarget !== targetTemp) {
+        const body = `Target changed ${previousTarget}°C → ${targetTemp}°C`;
+
+        push(ref(rtdb, 'notifications'), {
+          title: 'Target Temperature Changed',
+          body,
+          type: 'override',
+          timestamp: Date.now(),
+          unread: true,
+          iconColor: OVERRIDE_NOTIF_STYLE.iconColor,
+          iconBg: OVERRIDE_NOTIF_STYLE.iconBg,
+        })
+          .then(() => {
+            // Only fires once the in-app record is actually written, so
+            // a banner can't appear without one.
+            fireLocalNotification(isNotificationsEnabled, 'Target Temperature Changed', body);
+          })
+          .catch((error) => {
+            console.error('Failed to create override notification:', error);
+          });
+      }
     } catch (error) {
       setToastMessage(`Failed to update target temperature`);
     } finally {
@@ -166,8 +200,7 @@ export default function TemperatureScreen() {
         <TouchableOpacity
           style={[styles.areaSelector, { backgroundColor: theme.itemBg || '#FFF' }]}
           activeOpacity={0.8}
-          onPress={() => setAreaModalVisible(true)}
-                  onPress={openAreaModal}
+          onPress={openAreaModal}
         >
           <View style={styles.areaLeft}>
             <View style={styles.areaPin}>

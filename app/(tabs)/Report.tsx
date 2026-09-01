@@ -15,8 +15,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useNotificationPreference } from '../../context/NotificationPreferenceContext';
 import { useTheme } from '../../context/ThemeContext';
 import { database } from '../../firebaseConfig';
+import { fireLocalNotification } from '../../utils/localNotifications';
 
 interface LogRecord {
   id: string;
@@ -37,6 +39,7 @@ export default function ReportScreen() {
   const [logs, setLogs] = useState<LogRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const { isNotificationsEnabled } = useNotificationPreference();
 
   // Dynamic colors with fallbacks matching your screenshot theme
   const bgColor = theme.background || (isDarkModeEnabled ? '#121212' : '#FFF5F6');
@@ -73,19 +76,18 @@ export default function ReportScreen() {
 
       await Notifications.cancelAllScheduledNotificationsAsync();
 
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Weekly Summary Ready 📊',
-          body: 'Your weekly farm report is available to view or download.',
-          data: { type: 'SUNDAY_WEEKLY_REPORT' },
-        },
-        trigger: {
+      await fireLocalNotification(
+        isNotificationsEnabled,
+        'Weekly Summary Ready 📊',
+        'Your weekly farm report is available to view or download.',
+        {
           type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
           weekday: 1, // Sunday
           hour: 9,
           minute: 0,
         },
-      });
+        { type: 'SUNDAY_WEEKLY_REPORT' }
+      );
     } catch (error) {
       console.error('Error setting up weekly notification:', error);
     }
