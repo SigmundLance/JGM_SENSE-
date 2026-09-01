@@ -2,6 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
+import { onValue, ref } from 'firebase/database';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -15,7 +16,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
-import { auth } from '../../firebaseConfig';
+import { auth, database } from '../../firebaseConfig';
 
 type CameraStatus = 'online' | 'connecting' | 'offline';
 
@@ -27,11 +28,14 @@ interface CameraConfig {
   streamPort?: number;
 }
 
-const notificationsData = [
-  { id: 1, name: 'Temperature', action: ' Regulating sudden temperature spike.', time: '12:04 pm', isNew: true },
-  { id: 2, name: 'Gestation', action: ' New Piglet Born', time: '11:10 am', isNew: true },
-  { id: 3, name: 'Storage', action: 'Storage Cleaned', time: '09:00 am', isNew: false },
-];
+interface NotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  type: string;
+  timestamp: number;
+  unread: boolean;
+}
 
 // HTML generator for webview streaming matching Livefeed logic
 const getStreamHtml = (ipAddress: string, streamPort: number) => {
@@ -96,7 +100,8 @@ export default function Dashboard() {
   const [userName, setUserName] = useState(auth.currentUser?.displayName || "Ashley");
   const [userPhoto, setUserPhoto] = useState<string | null>(auth.currentUser?.photoURL ?? null);
   const [showNotifications, setShowNotifications] = useState(false);
-  
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -107,6 +112,41 @@ export default function Dashboard() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const notificationsRef = ref(database, 'notifications');
+
+    const unsubscribe = onValue(notificationsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const parsedNotifications: NotificationItem[] = Object.keys(data).map((key) => {
+          const item = data[key];
+          return {
+            id: key,
+            title: item.title || 'System Notification',
+            body: item.body || '',
+            type: item.type || 'General',
+            timestamp: item.timestamp || Date.now(),
+            unread: item.unread !== undefined ? item.unread : true,
+          };
+        });
+
+        parsedNotifications.sort((a, b) => b.timestamp - a.timestamp);
+        setNotifications(parsedNotifications);
+      } else {
+        setNotifications([]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const recentNotifications = notifications.slice(0, 3);
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  const formatNotifTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   // ESP32-CAM Configurations matching LiveFeed
   const farrowingConfig: CameraConfig = {
@@ -199,9 +239,11 @@ export default function Dashboard() {
               onPress={() => setShowNotifications(!showNotifications)}
             >
               <Ionicons name="notifications-outline" size={24} color="#444" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>3</Text>
-              </View>
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{unreadCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
 
             {showNotifications && (
@@ -220,44 +262,61 @@ export default function Dashboard() {
                   <Text style={styles.dropdownHeaderText}>NOTIFICATIONS</Text>
                 </View>
                 <View style={styles.dropdownContent}>
-                  {notificationsData.map((notif, index) => (
-                    <View key={notif.id} style={[
-                      styles.notifItem,
-                      index !== notificationsData.length - 1 && [
-                        styles.notifBorder,
-                        { borderBottomColor: isDarkModeEnabled ? '#3A3A3A' : '#F0F0F0' }
-                      ]
-                    ]}>
-                      <View style={[
-                        styles.notifAvatar,
-                        { backgroundColor: isDarkModeEnabled ? '#3A3A3A' : '#F0F2F5' }
-                      ]} />
-                      <View style={styles.notifTextContainer}>
-                        {notif.isNew && (
-                          <View style={styles.newTag}>
-                            <Text style={styles.newTagText}>NEW</Text>
-                          </View>
-                        )}
-                        <Text style={[
-                          styles.notifMainText,
-                          isDarkModeEnabled && { color: '#E0E0E0' }
-                        ]}>
+                  {recentNotifications.length > 0 ? (
+                    recentNotifications.map((notif, index) => (
+                      <TouchableOpacity
+                        key={notif.id}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setShowNotifications(false);
+                          router.push('/Notification');
+                        }}
+                        style={[
+                          styles.notifItem,
+                          index !== recentNotifications.length - 1 && [
+                            styles.notifBorder,
+                            { borderBottomColor: isDarkModeEnabled ? '#3A3A3A' : '#F0F0F0' }
+                          ]
+                        ]}
+                      >
+                        <View style={[
+                          styles.notifAvatar,
+                          { backgroundColor: isDarkModeEnabled ? '#3A3A3A' : '#F0F2F5' }
+                        ]} />
+                        <View style={styles.notifTextContainer}>
+                          {notif.unread && (
+                            <View style={styles.newTag}>
+                              <Text style={styles.newTagText}>NEW</Text>
+                            </View>
+                          )}
                           <Text style={[
-                            styles.notifName,
-                            { color: isDarkModeEnabled ? '#FFFFFF' : '#333' }
-                          ]}>{notif.name} </Text> 
+                            styles.notifMainText,
+                            isDarkModeEnabled && { color: '#E0E0E0' }
+                          ]}>
+                            <Text style={[
+                              styles.notifName,
+                              { color: isDarkModeEnabled ? '#FFFFFF' : '#333' }
+                            ]}>{notif.title} </Text>
+                            <Text style={[
+                              styles.notifAction,
+                              { color: isDarkModeEnabled ? '#AAA' : '#888' }
+                            ]}>{notif.body}</Text>
+                          </Text>
                           <Text style={[
-                            styles.notifAction,
-                            { color: isDarkModeEnabled ? '#AAA' : '#888' }
-                          ]}>{notif.action}</Text>
-                        </Text>
-                        <Text style={[
-                          styles.notifTime,
-                          { color: isDarkModeEnabled ? '#888' : '#A0A0A0' }
-                        ]}>{notif.time}</Text>
-                      </View>
+                            styles.notifTime,
+                            { color: isDarkModeEnabled ? '#888' : '#A0A0A0' }
+                          ]}>{formatNotifTime(notif.timestamp)}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.notifEmptyContainer}>
+                      <Text style={[
+                        styles.notifEmptyText,
+                        { color: isDarkModeEnabled ? '#888' : '#A0A0A0' }
+                      ]}>No notifications yet</Text>
                     </View>
-                  ))}
+                  )}
                 </View>
 
                 <TouchableOpacity 
@@ -598,6 +657,13 @@ const styles = StyleSheet.create({
     color: '#A0A0A0',
     fontSize: 11,
     textAlign: 'right',
+  },
+  notifEmptyContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  notifEmptyText: {
+    fontSize: 13,
   },
   seeAllButton: {
     paddingVertical: 10,
