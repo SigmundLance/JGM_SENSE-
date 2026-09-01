@@ -1,16 +1,16 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { onAuthStateChanged } from 'firebase/auth';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { onAuthStateChanged } from 'firebase/auth';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useTemp } from '../../context/TempContext';
@@ -442,7 +442,7 @@ function DashboardCameraCard({ config, onPress }: DashboardCameraCardProps) {
 const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
-    paddingTop: 50,
+    paddingTop: 80,
   },
   bottomSpacer: {
     height: 100,

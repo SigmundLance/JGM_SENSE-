@@ -1,14 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../../context/ThemeContext';
@@ -349,10 +349,10 @@ function FullscreenStreamModal({ config, visible, onClose }: FullscreenModalProp
 // =========================================================
 const styles = StyleSheet.create({
   mainContainer: { flex: 1 },
-  scrollContent: { padding: 20, paddingTop: 60 },
-  header: { marginBottom: 24 },
-  headerTitle: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 14, color: '#8A8A8E', marginTop: 4, lineHeight: 20 },
+  scrollContent: { paddingHorizontal: 25, paddingTop: 80, paddingBottom: 20 },
+  header: { marginBottom: 24, marginTop: 12 },
+  headerTitle: { fontSize: 34, fontWeight: 'bold', letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 14, color: '#8A8A8E', marginTop: 4, marginBottom: 20, lineHeight: 20 },
   bottomSpacer: { height: 40 },
   feedCard: {
     backgroundColor: '#FFFFFF',

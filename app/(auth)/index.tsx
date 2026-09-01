@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import { useFonts } from 'expo-font';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { GoogleAuthProvider, signInWithCredential, signInWithEmailAndPassword } from 'firebase/auth';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -30,6 +29,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const googleSigninRef = useRef<any>(null);
 
   // Load SF Pro Fonts
   const [fontsLoaded] = useFonts({
@@ -37,17 +37,66 @@ export default function LoginScreen() {
     'SF-Pro-Bold': require('../../assets/images/fonts/SFPRODISPLAYBOLD.otf'),
   });
 
-  // Explicitly set redirectUri for Expo Go testing
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'jgmsense', // Ensure this scheme matches the "scheme" in app.json
-  });
-
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     webClientId: '864904306291-arr0d17ls2s1j1qnnl195gr9mkvtvg4m.apps.googleusercontent.com',
     androidClientId: '864904306291-5um28d2fkv94uuh7susu7otvv6cpppif.apps.googleusercontent.com',
-    iosClientId: '864904306291-ecjj0a3v214m00a5814571j23577312.apps.googleusercontent.com',
-    redirectUri,
+    iosClientId: '864904306291-ecjj3l9cn2jafej4bn2chqsoll9lcts1.apps.googleusercontent.com',
   });
+
+  // Initialize Google Sign-In on component mount
+  useEffect(() => {
+    const initializeGoogleSignIn = async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          // Dynamically import to ensure it loads after native modules are ready
+          const { GoogleSignin, isSuccessResponse } = await import(
+            '@react-native-google-signin/google-signin'
+          );
+          
+          googleSigninRef.current = { GoogleSignin, isSuccessResponse };
+          
+          GoogleSignin.configure({
+            webClientId: '864904306291-arr0d17ls2s1j1qnnl195gr9mkvtvg4m.apps.googleusercontent.com',
+            iosClientId: '864904306291-ecjj3l9cn2jafej4bn2chqsoll9lcts1.apps.googleusercontent.com',
+          });
+        } catch (error) {
+          console.error('Failed to initialize GoogleSignin:', error);
+        }
+      }
+    };
+
+    initializeGoogleSignIn();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        if (!googleSigninRef.current) {
+          Alert.alert('Google Sign-In Error', 'Google Sign-In module not initialized yet. Please try again.');
+          return;
+        }
+
+        const { GoogleSignin, isSuccessResponse } = googleSigninRef.current;
+
+        if (Platform.OS === 'android') {
+          await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        }
+
+        const signInResult = await GoogleSignin.signIn();
+        if (!isSuccessResponse(signInResult) || !signInResult.data.idToken) {
+          throw new Error('Google did not return an ID token.');
+        }
+
+        await signInWithCredential(auth, GoogleAuthProvider.credential(signInResult.data.idToken));
+        router.replace('/(tabs)/dashboard');
+        return;
+      }
+
+      await promptAsync();
+    } catch (error: any) {
+      Alert.alert('Google Sign-In Error', error?.message || 'Unable to sign in with Google.');
+    }
+  };
 
   useEffect(() => {
     if (response?.type === 'success') {
@@ -167,11 +216,9 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={styles.googleButton}
-              disabled={!request}
+              disabled={Platform.OS === 'web' && !request}
               activeOpacity={0.8}
-              onPress={() => {
-                promptAsync();
-              }}
+              onPress={handleGoogleSignIn}
             >
               <Image
                 source={require('./GoogleIcon.png')}

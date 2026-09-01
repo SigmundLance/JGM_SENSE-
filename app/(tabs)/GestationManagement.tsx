@@ -348,7 +348,11 @@ export default function GestationManagement() {
                     >
                       <View style={styles.cardHeaderLeft}>
                         <View style={styles.avatarContainer}>
-                          <Text style={styles.avatarIcon}>🐷</Text>
+                          <Image
+                            source={require('./Pictures/Pig.png')}
+                            style={styles.avatarIcon}
+                            resizeMode="contain"
+                          />
                         </View>
                         <View style={styles.pigInfoContainer}>
                           <Text
@@ -905,26 +909,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 25,
   },
   header: {
     marginBottom: 10,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 34,
+    fontSize: 34,
+    fontWeight: 'bold',
+    lineHeight: 40,
+    marginBottom: 12,
   },
   headerSubtitle: {
     fontSize: 13,
-    marginTop: 6,
+    marginTop: 2,
+    marginBottom: 20,
     lineHeight: 18,
   },
   mainIllustration: {
     width: '100%',
-    height: 140,
+    height: 220,
     alignSelf: 'center',
-    marginVertical: 10,
+    marginVertical: 0,
+    marginTop: -10,
   },
   alertCard: {
     backgroundColor: '#FFFBEB',
@@ -973,6 +980,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     gap: 12,
+    marginTop: 20,
   },
   card: {
     borderRadius: 16,
@@ -1005,7 +1013,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarIcon: {
-    fontSize: 22,
+    width: 40,
+    height: 40,
   },
   pigInfoContainer: {
     gap: 4,

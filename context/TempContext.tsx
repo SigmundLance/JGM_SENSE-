@@ -1,4 +1,4 @@
-import { onValue, ref, set } from 'firebase/database';
+import { onValue, push, ref, set } from 'firebase/database';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { rtdb } from '../firebaseConfig';
 
@@ -28,9 +28,26 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
-          setCurrentTemp(data.currentTemp !== undefined ? Number(data.currentTemp) : null);
+          const nextTemperature = data.currentTemp !== undefined ? Number(data.currentTemp) : null;
+
+          setCurrentTemp(nextTemperature);
           setHumidity(data.humidity !== undefined ? Number(data.humidity) : null);
           setTargetTemp(data.targetTemp !== undefined ? Number(data.targetTemp) : 32);
+
+          if (nextTemperature !== null && Number.isFinite(nextTemperature)) {
+            const notificationsRef = ref(rtdb, 'notifications');
+            push(notificationsRef, {
+              title: 'Temperature Reading',
+              body: `Current temperature: ${nextTemperature.toFixed(1)}°C`,
+              type: 'Temperature',
+              timestamp: Date.now(),
+              unread: true,
+              iconColor: '#E53935',
+              iconBg: '#FFEBEE',
+            }).catch((error) => {
+              console.error('Failed to create temperature notification:', error);
+            });
+          }
         }
       },
       (error) => {

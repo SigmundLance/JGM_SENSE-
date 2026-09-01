@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -14,6 +15,13 @@ import {
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
 
+const BROODING_AREAS = [
+  { id: '1', name: 'Brooding Area 1' },
+  { id: '2', name: 'Brooding Area 2' },
+  { id: '3', name: 'Brooding Area 3' },
+  { id: '4', name: 'Brooding Area 4' },
+];
+
 export default function TemperatureScreen() {
   const { theme } = useTheme();
   // Extracted targetTemp and humidity from useTemp context
@@ -24,6 +32,10 @@ export default function TemperatureScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
+  const [selectedArea, setSelectedArea] = useState<string>('1');
+  const [areaModalVisible, setAreaModalVisible] = useState(false);
+
+  const [tempSelectedArea, setTempSelectedArea] = useState<string>('1');
 
   // Sync state if initialTarget is fetched after component mounts
   useEffect(() => {
@@ -143,6 +155,23 @@ export default function TemperatureScreen() {
   };
 
   const statusBarStyle = theme.isDark ? 'light-content' : 'dark-content';
+  const currentAreaName = BROODING_AREAS.find(a => a.id === selectedArea)?.name || 'Brooding Area 1';
+
+  const openAreaModal = () => {
+    setTempSelectedArea(selectedArea);
+    setAreaModalVisible(true);
+  };
+
+  const handleAreaSelect = (areaId: string) => {
+    setTempSelectedArea(areaId);
+  };
+
+  const confirmAreaSelection = () => {
+    setSelectedArea(tempSelectedArea);
+    setAreaModalVisible(false);
+    setToastMessage(`Switched to ${BROODING_AREAS.find(a => a.id === tempSelectedArea)?.name}`);
+    setTimeout(() => setToastMessage(null), 2000);
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
@@ -158,6 +187,8 @@ export default function TemperatureScreen() {
         <TouchableOpacity
           style={[styles.areaSelector, { backgroundColor: theme.itemBg || '#FFF' }]}
           activeOpacity={0.8}
+          onPress={() => setAreaModalVisible(true)}
+                  onPress={openAreaModal}
         >
           <View style={styles.areaLeft}>
             <View style={styles.areaPin}>
@@ -165,7 +196,7 @@ export default function TemperatureScreen() {
             </View>
             <View>
               <Text style={styles.areaTextLabel}>CURRENT AREA</Text>
-              <Text style={[styles.areaTextValue, { color: theme.text }]}>Brooding Area 1</Text>
+              <Text style={[styles.areaTextValue, { color: theme.text }]}>{currentAreaName}</Text>
             </View>
           </View>
           <Ionicons name="chevron-down" size={16} color="#8E8E93" />
@@ -327,6 +358,61 @@ export default function TemperatureScreen() {
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
       )}
+
+      {/* Area Selection Modal */}
+      <Modal
+        visible={areaModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAreaModalVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.itemBg }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Select Brooding Area</Text>
+              <TouchableOpacity onPress={() => setAreaModalVisible(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalOptions}>
+              {BROODING_AREAS.map((area) => (
+                <TouchableOpacity
+                  key={area.id}
+                  style={[
+                    styles.areaOption,
+                    tempSelectedArea === area.id && { backgroundColor: '#FFE6E6', borderColor: '#FF6B81', borderWidth: 2 },
+                    { backgroundColor: theme.itemBg }
+                  ]}
+                  onPress={() => handleAreaSelect(area.id)}
+                >
+                  <Ionicons 
+                    name={tempSelectedArea === area.id ? "checkmark-circle" : "ellipse-outline"} 
+                    size={24} 
+                    color={tempSelectedArea === area.id ? '#FF6B81' : '#8E8E93'} 
+                  />
+                  <Text 
+                    style={[
+                      styles.areaOptionText, 
+                      { color: theme.text },
+                      tempSelectedArea === area.id && { fontWeight: 'bold' }
+                    ]}
+                  >
+                    {area.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={confirmAreaSelection}
+            >
+              <Text style={styles.modalCloseBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -612,5 +698,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+
+  /* Area Selection Modal */
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    minHeight: '50%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalOptions: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  areaOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  areaOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalCloseBtn: {
+    backgroundColor: '#FF6B81',
+    paddingVertical: 14,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

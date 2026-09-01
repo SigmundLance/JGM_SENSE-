@@ -25,17 +25,23 @@ export default function AccountScreen() {
   // Reference for resetting scroll on focus
   const scrollRef = useRef<ScrollView>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(auth.currentUser?.photoURL ?? null);
+  const [userName, setUserName] = useState<string>(auth.currentUser?.displayName || 'Ashley');
+  const [userEmail, setUserEmail] = useState<string>(auth.currentUser?.email || '2303640@ub.edu.ph');
 
   useFocusEffect(
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       setUserPhoto(auth.currentUser?.photoURL ?? null);
+      setUserName(auth.currentUser?.displayName || 'Ashley');
+      setUserEmail(auth.currentUser?.email || '2303640@ub.edu.ph');
     }, [])
   );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUserPhoto(user?.photoURL ?? null);
+      setUserName(user?.displayName || 'Ashley');
+      setUserEmail(user?.email || '2303640@ub.edu.ph');
     });
 
     return () => unsubscribe();
@@ -68,10 +74,6 @@ export default function AccountScreen() {
   if (!fontsLoaded) {
     return null;
   }
-
-  // Get current user display details or default fallback
-  const userEmail = auth.currentUser?.email || '2303640@ub.edu.ph';
-  const userName = auth.currentUser?.displayName || 'Ashley';
 
   // Dynamic colors for dark vs light mode
   const cardBgColor = isDarkModeEnabled ? '#1E1E1E' : '#FFFFFF';

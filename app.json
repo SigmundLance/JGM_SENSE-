@@ -10,8 +10,9 @@
     "owner": "jgm-sense",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jgmsense.app",
-      "infoPlist": {
+        "bundleIdentifier": "com.jgmsense.app",
+        "googleServicesFile": "./GoogleService-Info.plist",
+        "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
@@ -56,7 +57,11 @@
           }
         }
       ],
-      "@react-native-google-signin/google-signin"
+      [
+        "@react-native-google-signin/google-signin",
+        {
+        "iosUrlScheme": "com.googleusercontent.apps.864904306291-ecjj3l9cn2jafej4bn2chqsoll9lcts1"        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
