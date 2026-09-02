@@ -9,7 +9,8 @@ export async function fireLocalNotification(
   title: string,
   body: string,
   trigger: Notifications.NotificationTriggerInput = null,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
+  sound?: string | boolean
 ): Promise<void> {
   if (!enabled) return;
 
@@ -19,6 +20,7 @@ export async function fireLocalNotification(
         title,
         body,
         ...(data ? { data } : {}),
+        ...(sound !== undefined ? { sound } : {}),
       },
       trigger,
     });

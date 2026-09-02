@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 // Unified Firebase Configuration
 const firebaseConfig = {
@@ -41,5 +42,6 @@ export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
 export const database = rtdb; // Alias added to support imports for 'database'
+export const storage = getStorage(app);
 
 export default app;

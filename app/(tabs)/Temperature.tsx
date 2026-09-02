@@ -151,7 +151,14 @@ export default function TemperatureScreen() {
           .then(() => {
             // Only fires once the in-app record is actually written, so
             // a banner can't appear without one.
-            fireLocalNotification(isNotificationsEnabled, 'Target Temperature Changed', body);
+            fireLocalNotification(
+              isNotificationsEnabled,
+              'Target Temperature Changed',
+              body,
+              { channelId: 'override' },
+              undefined,
+              'OinkNotifications.wav'
+            );
           })
           .catch((error) => {
             console.error('Failed to create override notification:', error);

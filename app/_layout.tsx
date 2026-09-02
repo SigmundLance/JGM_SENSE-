@@ -4,10 +4,12 @@ import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import LoadingScreen from '../components/LoadingScreen';
+import { auth } from '../firebaseConfig';
 
 // 1. Configure notification behavior
 Notifications.setNotificationHandler({
@@ -36,6 +38,25 @@ export default function RootLayout() {
   const [isCustomLoading, setIsCustomLoading] = useState(true);
   const [hasNavigated, setHasNavigated] = useState(false);
 
+  // One-shot cleanup for accounts left with a stale local photoURI from
+  // before profile photos were uploaded to Storage (that file:// / cache
+  // path can never resolve once the app container is recreated). Uses
+  // onAuthStateChanged rather than reading auth.currentUser directly,
+  // since the persisted session restores asynchronously and may not be
+  // populated yet on the first render.
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      if (user?.photoURL && !user.photoURL.startsWith('https://')) {
+        updateProfile(user, { photoURL: null }).catch((error) => {
+          console.error('Failed to clear stale photoURL:', error);
+        });
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     const initApp = async () => {
       // 2. Request Notification Permissions on Startup
@@ -52,6 +73,15 @@ export default function RootLayout() {
           name: 'Default',
           importance: Notifications.AndroidImportance.HIGH,
           sound: 'default',
+        });
+
+        // Separate channel so only override notifications get the Oink
+        // sound - channel sound is fixed per-channel on Android, so
+        // reusing 'default' here would make status alerts play it too.
+        await Notifications.setNotificationChannelAsync('override', {
+          name: 'Target Overrides',
+          importance: Notifications.AndroidImportance.HIGH,
+          sound: 'OinkNotifications.wav',
         });
       }
 

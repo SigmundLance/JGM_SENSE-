@@ -22,7 +22,7 @@
     "android": {
       "package": "com.jgmsense.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FDF0F0",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -48,6 +48,12 @@
       ],
       "expo-web-browser",
       "expo-font",
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/OinkNotifications.wav"]
+        }
+      ],
       "@react-native-community/datetimepicker",
       [
         "expo-build-properties",

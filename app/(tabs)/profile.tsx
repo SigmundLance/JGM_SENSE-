@@ -5,6 +5,7 @@ import { Stack, useRouter } from 'expo-router';
 import { updateProfile } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -17,6 +18,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { auth } from '../../firebaseConfig';
+import { uploadProfilePhoto } from '../../utils/profilePhoto';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -34,6 +36,11 @@ export default function ProfileScreen() {
   const [photoURL, setPhotoURL] = useState<string | null>(
     auth.currentUser?.photoURL || null
   );
+  // Optimistic local preview only - never persisted. photoURL (above)
+  // only ever gets set to a Storage download URL, so a failed or
+  // in-progress upload can never leave it pointing at a local file.
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useEffect(() => {
     if (auth.currentUser) {
@@ -67,18 +74,28 @@ export default function ProfileScreen() {
       quality: 0.7,
     });
 
-    if (!result.canceled && result.assets[0].uri) {
+    if (!result.canceled && result.assets[0].uri && auth.currentUser) {
       const selectedImageUri = result.assets[0].uri;
-      setPhotoURL(selectedImageUri);
+      // Show the picked photo immediately, but only as a preview -
+      // photoURL (and Firebase Auth's copy of it) isn't touched until
+      // the upload actually succeeds.
+      setPreviewUri(selectedImageUri);
+      setUploadProgress(0);
 
       try {
-        if (auth.currentUser) {
-          // Update Firebase Auth user photo URL
-          await updateProfile(auth.currentUser, { photoURL: selectedImageUri });
-          Alert.alert('Success', 'Profile photo updated!');
-        }
+        const downloadURL = await uploadProfilePhoto(
+          auth.currentUser.uid,
+          selectedImageUri,
+          setUploadProgress
+        );
+        await updateProfile(auth.currentUser, { photoURL: downloadURL });
+        setPhotoURL(downloadURL);
+        Alert.alert('Success', 'Profile photo updated!');
       } catch (error: any) {
-        Alert.alert('Photo Update Failed', error.message);
+        Alert.alert('Photo Update Failed', error.message || 'Could not upload your photo. Please try again.');
+      } finally {
+        setPreviewUri(null);
+        setUploadProgress(null);
       }
     }
   };
@@ -135,11 +152,19 @@ export default function ProfileScreen() {
           style={styles.avatarContainer}
           activeOpacity={0.8}
           onPress={handlePickImage}
+          disabled={uploadProgress !== null}
         >
-          {photoURL ? (
-            <Image source={{ uri: photoURL }} style={styles.avatarImage} />
+          {previewUri || photoURL ? (
+            <Image source={{ uri: previewUri ?? photoURL ?? undefined }} style={styles.avatarImage} />
           ) : (
             <Ionicons name="person-outline" size={60} color="#F7A8B8" />
+          )}
+
+          {uploadProgress !== null && (
+            <View style={styles.uploadOverlay}>
+              <ActivityIndicator color="#FFF" />
+              <Text style={styles.uploadOverlayText}>{Math.round(uploadProgress * 100)}%</Text>
+            </View>
           )}
 
           {/* Camera Badge Overlay */}
@@ -322,6 +347,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  uploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 50,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadOverlayText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
   },
   content: {
     paddingHorizontal: 20,
