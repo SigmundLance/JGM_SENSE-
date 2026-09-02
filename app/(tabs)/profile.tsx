@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { auth } from '../../firebaseConfig';
-import { uploadProfilePhoto } from '../../utils/profilePhoto';
+import { useProfilePhoto } from '../../hooks/use-profile-photo';
+import { prepareProfilePhoto, saveProfilePhoto } from '../../utils/profilePhoto';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -33,14 +34,20 @@ export default function ProfileScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [name, setName] = useState(auth.currentUser?.displayName || 'User');
   const [editName, setEditName] = useState(name);
-  const [photoURL, setPhotoURL] = useState<string | null>(
+  const [authPhotoURL, setAuthPhotoURL] = useState<string | null>(
     auth.currentUser?.photoURL || null
   );
-  // Optimistic local preview only - never persisted. photoURL (above)
-  // only ever gets set to a Storage download URL, so a failed or
-  // in-progress upload can never leave it pointing at a local file.
+  // Custom-uploaded photo, live from Firestore. Takes priority over
+  // authPhotoURL, which otherwise reflects e.g. a Google account avatar.
+  const firestorePhoto = useProfilePhoto(auth.currentUser?.uid);
+  // Optimistic local preview only - never persisted anywhere. The
+  // displayed photo only ever reflects firestorePhoto/authPhotoURL, so
+  // a failed or in-progress save can never leave it pointing at a local
+  // file that will vanish on reinstall/rebuild.
   const [previewUri, setPreviewUri] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const displayPhoto = previewUri ?? firestorePhoto ?? authPhotoURL;
 
   useEffect(() => {
     if (auth.currentUser) {
@@ -49,7 +56,7 @@ export default function ProfileScreen() {
         setEditName(auth.currentUser.displayName);
       }
       if (auth.currentUser.photoURL) {
-        setPhotoURL(auth.currentUser.photoURL);
+        setAuthPhotoURL(auth.currentUser.photoURL);
       }
     }
   }, []);
@@ -76,26 +83,24 @@ export default function ProfileScreen() {
 
     if (!result.canceled && result.assets[0].uri && auth.currentUser) {
       const selectedImageUri = result.assets[0].uri;
-      // Show the picked photo immediately, but only as a preview -
-      // photoURL (and Firebase Auth's copy of it) isn't touched until
-      // the upload actually succeeds.
+      // Show the picked photo immediately, but only as a preview - the
+      // persisted photo (firestorePhoto) isn't touched until the save
+      // actually succeeds.
       setPreviewUri(selectedImageUri);
-      setUploadProgress(0);
+      setIsSaving(true);
 
       try {
-        const downloadURL = await uploadProfilePhoto(
-          auth.currentUser.uid,
-          selectedImageUri,
-          setUploadProgress
-        );
-        await updateProfile(auth.currentUser, { photoURL: downloadURL });
-        setPhotoURL(downloadURL);
+        const base64 = await prepareProfilePhoto(selectedImageUri);
+        await saveProfilePhoto(auth.currentUser.uid, base64);
+        // No local setState needed for the persisted photo itself -
+        // firestorePhoto updates on its own via the live Firestore
+        // listener once this write lands.
         Alert.alert('Success', 'Profile photo updated!');
       } catch (error: any) {
-        Alert.alert('Photo Update Failed', error.message || 'Could not upload your photo. Please try again.');
+        Alert.alert('Photo Update Failed', error.message || 'Could not save your photo. Please try again.');
       } finally {
         setPreviewUri(null);
-        setUploadProgress(null);
+        setIsSaving(false);
       }
     }
   };
@@ -152,18 +157,17 @@ export default function ProfileScreen() {
           style={styles.avatarContainer}
           activeOpacity={0.8}
           onPress={handlePickImage}
-          disabled={uploadProgress !== null}
+          disabled={isSaving}
         >
-          {previewUri || photoURL ? (
-            <Image source={{ uri: previewUri ?? photoURL ?? undefined }} style={styles.avatarImage} />
+          {displayPhoto ? (
+            <Image source={{ uri: displayPhoto }} style={styles.avatarImage} />
           ) : (
             <Ionicons name="person-outline" size={60} color="#F7A8B8" />
           )}
 
-          {uploadProgress !== null && (
+          {isSaving && (
             <View style={styles.uploadOverlay}>
               <ActivityIndicator color="#FFF" />
-              <Text style={styles.uploadOverlayText}>{Math.round(uploadProgress * 100)}%</Text>
             </View>
           )}
 
@@ -354,12 +358,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  uploadOverlayText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
   },
   content: {
     paddingHorizontal: 20,

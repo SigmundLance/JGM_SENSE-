@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only the new users/{userId} collection this change adds. No
+    // firestore.rules file existed in this repo before, so whatever
+    // currently protects Gestation_Records (or anything else) lives
+    // only in the Firebase Console and isn't reflected here - deploying
+    // this file as-is, wholesale, would replace those unseen rules too.
+    // Add them here (or merge this into whatever the console already
+    // has) before deploying, rather than pushing this file blind.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.photoBase64 is string
+                   // Matches utils/profilePhoto.ts's own pre-write check;
+                   // this is the server-side backstop against a buggy or
+                   // bypassed client, kept well under Firestore's 1MiB
+                   // per-document cap.
+                   && request.resource.data.photoBase64.size() < 300 * 1024;
+    }
+  }
+}

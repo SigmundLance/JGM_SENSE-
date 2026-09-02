@@ -17,6 +17,7 @@ import { WebView } from 'react-native-webview';
 import { getTempStatus, TempStatus } from '../../constants/temperature';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useProfilePhoto } from '../../hooks/use-profile-photo';
 import { auth, database } from '../../firebaseConfig';
 
 const STATUS_GRADIENTS: Record<TempStatus, readonly [string, string]> = {
@@ -109,6 +110,9 @@ export default function Dashboard() {
   const router = useRouter();
   const [userName, setUserName] = useState(auth.currentUser?.displayName || "Ashley");
   const [userPhoto, setUserPhoto] = useState<string | null>(auth.currentUser?.photoURL ?? null);
+  // Custom-uploaded photo, live from Firestore - takes priority over
+  // userPhoto, which otherwise reflects e.g. a Google account avatar.
+  const firestorePhoto = useProfilePhoto(auth.currentUser?.uid);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
@@ -204,8 +208,8 @@ export default function Dashboard() {
         {/* Header Area */}
         <View style={styles.header}>
           <View style={styles.logoCircle}>
-            {userPhoto ? (
-              <Image source={{ uri: userPhoto }} style={styles.logoImage} resizeMode="cover" />
+            {firestorePhoto || userPhoto ? (
+              <Image source={{ uri: firestorePhoto ?? userPhoto ?? undefined }} style={styles.logoImage} resizeMode="cover" />
             ) : (
               <Image 
                 source={require('./Pictures/JGMLogo.png')} 

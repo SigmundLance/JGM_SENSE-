@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { auth } from '../../firebaseConfig';
+import { useProfilePhoto } from '../../hooks/use-profile-photo';
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -25,6 +26,9 @@ export default function AccountScreen() {
   // Reference for resetting scroll on focus
   const scrollRef = useRef<ScrollView>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(auth.currentUser?.photoURL ?? null);
+  // Custom-uploaded photo, live from Firestore - takes priority over
+  // userPhoto, which otherwise reflects e.g. a Google account avatar.
+  const firestorePhoto = useProfilePhoto(auth.currentUser?.uid);
   const [userName, setUserName] = useState<string>(auth.currentUser?.displayName || 'Ashley');
   const [userEmail, setUserEmail] = useState<string>(auth.currentUser?.email || '2303640@ub.edu.ph');
 
@@ -109,8 +113,8 @@ export default function AccountScreen() {
                   { backgroundColor: isDarkModeEnabled ? '#2C1D20' : '#FDF0F0' },
                 ]}
               >
-                {userPhoto ? (
-                  <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
+                {firestorePhoto || userPhoto ? (
+                  <Image source={{ uri: firestorePhoto ?? userPhoto ?? undefined }} style={styles.avatarImage} />
                 ) : (
                   <Ionicons name="person-outline" size={24} color="#A05C68" />
                 )}
