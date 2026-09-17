@@ -55,6 +55,47 @@ const calculateMoveDate = (inseminationDateStr: string): string => {
   return date.toISOString().split('T')[0];
 };
 
+// Masks free digit entry into YYYY-MM-DD as the user types, inserting
+// dashes after the 4th and 6th digit. `previousFormatted` is the field's
+// current (already-masked) value, used to detect a backspace that only
+// removed an auto-inserted dash (native char count shrank but digit
+// count didn't) - in that case we also drop the trailing digit so
+// backspacing near a separator always removes a digit instead of
+// silently doing nothing.
+const formatDateInput = (rawText: string, previousFormatted: string): string => {
+  const rawDigits = rawText.replace(/\D/g, '');
+  const prevDigits = previousFormatted.replace(/\D/g, '');
+
+  let digits = rawDigits;
+  if (rawText.length < previousFormatted.length && rawDigits.length === prevDigits.length) {
+    digits = digits.slice(0, -1);
+  }
+  digits = digits.slice(0, 8);
+
+  let formatted = digits.slice(0, 4);
+  if (digits.length > 4) formatted += '-' + digits.slice(4, 6);
+  if (digits.length > 6) formatted += '-' + digits.slice(6, 8);
+  return formatted;
+};
+
+// True only for a complete, calendar-valid YYYY-MM-DD (rejects month
+// 00/13+, day 32+, Feb 30, etc. - leap years handled via the "day 0 of
+// next month" trick).
+const isValidCalendarDate = (formatted: string): boolean => {
+  const match = formatted.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  if (month < 1 || month > 12) return false;
+  if (day < 1) return false;
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return day <= daysInMonth;
+};
+
 const formatDateForDisplay = (dateString: string) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -130,6 +171,8 @@ export default function GestationManagement() {
   };
 
   const handleSaveEdit = async (id: string) => {
+    if (!isValidCalendarDate(editInsDate)) return;
+
     try {
       const pigRef = doc(db, 'Gestation_Records', id);
       await updateDoc(pigRef, {
@@ -187,8 +230,10 @@ export default function GestationManagement() {
     }
   };
 
+  const isNewInsDateValid = isValidCalendarDate(newInsDate);
+
   const handleAddNewRecord = async () => {
-    if (!newName.trim() || !newInsDate.trim()) return;
+    if (!newName.trim() || !isNewInsDateValid) return;
 
     const estimatedFarrowDate = calculateFarrowDate(newInsDate);
     const movementDate = newMoveDate || calculateMoveDate(newInsDate);
@@ -643,12 +688,19 @@ export default function GestationManagement() {
                                       : '#F9F5F5',
                                   },
                                 ]}
+                                keyboardType="number-pad"
+                                maxLength={10}
                                 value={editInsDate}
                                 onChangeText={(val) => {
-                                  setEditInsDate(val);
-                                  setEditFarrowDate(calculateFarrowDate(val));
+                                  const formatted = formatDateInput(val, editInsDate);
+                                  setEditInsDate(formatted);
+                                  setEditFarrowDate(calculateFarrowDate(formatted));
                                 }}
                               />
+                              {editInsDate.replace(/-/g, '').length === 8 &&
+                                !isValidCalendarDate(editInsDate) && (
+                                  <Text style={styles.dateErrorText}>Enter a valid date</Text>
+                                )}
                             </View>
 
                             <View style={styles.inputWrapper}>
@@ -738,8 +790,12 @@ export default function GestationManagement() {
                               </TouchableOpacity>
 
                               <TouchableOpacity
-                                style={styles.saveChangesBtn}
+                                style={[
+                                  styles.saveChangesBtn,
+                                  !isValidCalendarDate(editInsDate) && { opacity: 0.5 },
+                                ]}
                                 onPress={() => handleSaveEdit(pig.id!)}
+                                disabled={!isValidCalendarDate(editInsDate)}
                               >
                                 <Ionicons
                                   name="checkmark"
@@ -844,12 +900,18 @@ export default function GestationManagement() {
                     ]}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#A08C90"
+                    keyboardType="number-pad"
+                    maxLength={10}
                     value={newInsDate}
                     onChangeText={(val) => {
-                      setNewInsDate(val);
-                      setNewMoveDate(calculateMoveDate(val));
+                      const formatted = formatDateInput(val, newInsDate);
+                      setNewInsDate(formatted);
+                      setNewMoveDate(calculateMoveDate(formatted));
                     }}
                   />
+                  {newInsDate.replace(/-/g, '').length === 8 && !isNewInsDateValid && (
+                    <Text style={styles.dateErrorText}>Enter a valid date</Text>
+                  )}
                 </View>
 
                 <View style={styles.inputWrapper}>
@@ -872,8 +934,12 @@ export default function GestationManagement() {
                 </View>
 
                 <TouchableOpacity
-                  style={styles.submitBtn}
+                  style={[
+                    styles.submitBtn,
+                    (!newName.trim() || !isNewInsDateValid) && { opacity: 0.5 },
+                  ]}
                   onPress={handleAddNewRecord}
+                  disabled={!newName.trim() || !isNewInsDateValid}
                 >
                   <Text style={styles.submitBtnText}>Save Sow Record</Text>
                 </TouchableOpacity>
@@ -1178,6 +1244,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     fontSize: 13,
+  },
+  dateErrorText: {
+    fontSize: 11,
+    color: '#D43C4A',
+    fontWeight: '600',
   },
   statusChipGrid: {
     flexDirection: 'row',
