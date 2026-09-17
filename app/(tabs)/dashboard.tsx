@@ -29,9 +29,17 @@ const FARROWING_REMINDER_WINDOW_DAYS = 30;
 // timezone. Parse the components and construct via the local-time
 // Date constructor instead, wherever a stored date string needs to be
 // compared against "today."
+//
+// Requires a strict match rather than a plain split+Number: Number('')
+// is 0, not NaN, so a bare split on '', or on a partial/malformed
+// string, can silently yield a "valid" Date (e.g. Jan 1 1900) instead
+// of Invalid Date - which isNaN(date.getTime()) would never catch.
 const parseISODateLocal = (isoDate: string): Date => {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  return new Date(year, (month || 1) - 1, day || 1);
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date(NaN);
+
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
 };
 
 const STATUS_GRADIENTS: Record<TempStatus, readonly [string, string]> = {
