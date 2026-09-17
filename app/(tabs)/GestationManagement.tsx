@@ -117,7 +117,7 @@ const isValidCalendarDate = (formatted: string): boolean => {
 
 const formatDateForDisplay = (dateString: string) => {
   if (!dateString) return '';
-  const date = new Date(dateString);
+  const date = parseISODateLocal(dateString);
   if (isNaN(date.getTime())) return dateString;
   return date.toLocaleDateString('en-US', {
     month: 'short',
