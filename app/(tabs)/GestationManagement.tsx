@@ -29,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../firebaseConfig';
 
-export type PregnancyStatus = 'Confirmed' | 'Pending' | 'Failed' | 'High Risk';
+export type PregnancyStatus = 'Confirmed' | 'Pending' | 'Failed';
 
 export interface GestationRecord {
   id?: string;
