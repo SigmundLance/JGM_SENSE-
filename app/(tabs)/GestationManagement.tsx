@@ -38,15 +38,22 @@ export interface GestationRecord {
   inseminationDate: string; // "YYYY-MM-DD"
   movementDate: string; // "YYYY-MM-DD"
   estimatedFarrowDate: string; // "YYYY-MM-DD"
-  overdueDays?: number;
 }
 
 // new Date("YYYY-MM-DD") parses as UTC midnight, not local midnight -
 // same issue fixed in dashboard.tsx. Parse the components and construct
 // via the local-time Date constructor instead.
+//
+// Requires a strict match rather than a plain split+Number: Number('')
+// is 0, not NaN, so a bare split on '', or on a partial/malformed
+// string, can silently yield a "valid" Date (e.g. Jan 1 1900) instead
+// of Invalid Date - which isNaN(date.getTime()) would never catch.
 const parseISODateLocal = (isoDate: string): Date => {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  return new Date(year, (month || 1) - 1, day || 1);
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date(NaN);
+
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
 };
 
 // toISOString() converts to UTC on the way out, which would re-introduce
@@ -72,6 +79,26 @@ const calculateMoveDate = (inseminationDateStr: string): string => {
   if (isNaN(date.getTime())) return '';
   date.setDate(date.getDate() + 107);
   return toISODateStringLocal(date);
+};
+
+// Pregnancy checks are expected 24-30 days post-insemination (see the
+// alert banner copy). Overdue means past day 30 with no confirmation
+// yet - computed live, not stored, since nothing ever wrote a real
+// value for this.
+const computeOverdueDays = (pig: GestationRecord): number | undefined => {
+  if (pig.pregnancyStatus !== 'Pending') return undefined;
+
+  const inseminationDate = parseISODateLocal(pig.inseminationDate);
+  if (isNaN(inseminationDate.getTime())) return undefined;
+
+  const checkDeadline = new Date(inseminationDate);
+  checkDeadline.setDate(checkDeadline.getDate() + 30);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const days = Math.floor((today.getTime() - checkDeadline.getTime()) / 86400000);
+  return days > 0 ? days : undefined;
 };
 
 // Masks free digit entry into YYYY-MM-DD as the user types, inserting
@@ -277,9 +304,7 @@ export default function GestationManagement() {
     }
   };
 
-  const overduePigs = pigRecords.filter(
-    (p) => p.overdueDays && p.pregnancyStatus === 'Pending'
-  );
+  const overduePigs = pigRecords.filter((p) => computeOverdueDays(p) !== undefined);
 
   return (
     <View
@@ -365,7 +390,7 @@ export default function GestationManagement() {
                 {overduePigs.map((p) => (
                   <View key={p.id} style={styles.alertTag}>
                     <Text style={styles.alertTagText}>
-                      {p.name} · {p.overdueDays}d overdue
+                      {p.name} · {computeOverdueDays(p)}d overdue
                     </Text>
                   </View>
                 ))}
@@ -389,6 +414,7 @@ export default function GestationManagement() {
                 const isEditing = editingPigId === pig.id;
                 const isConfirmed = pig.pregnancyStatus === 'Confirmed';
                 const isPending = pig.pregnancyStatus === 'Pending';
+                const overdueDays = computeOverdueDays(pig);
 
                 return (
                   <View
@@ -462,10 +488,10 @@ export default function GestationManagement() {
                               </Text>
                             </View>
 
-                            {pig.overdueDays && isPending && (
+                            {overdueDays !== undefined && isPending && (
                               <View style={styles.overdueBadge}>
                                 <Text style={styles.overdueBadgeText}>
-                                  Overdue {pig.overdueDays}d
+                                  Overdue {overdueDays}d
                                 </Text>
                               </View>
                             )}
@@ -541,10 +567,10 @@ export default function GestationManagement() {
                         {/* VIEW MODE */}
                         {!isEditing ? (
                           <>
-                            {pig.overdueDays && isPending && (
+                            {overdueDays !== undefined && isPending && (
                               <View style={styles.overdueNoticeBox}>
                                 <Text style={styles.overdueNoticeTitle}>
-                                  Pregnancy check overdue by {pig.overdueDays}{' '}
+                                  Pregnancy check overdue by {overdueDays}{' '}
                                   days
                                 </Text>
                                 <View style={styles.overdueNoticeBtns}>
