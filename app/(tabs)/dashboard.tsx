@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { onValue, ref } from 'firebase/database';
+import { collection, onSnapshot } from 'firebase/firestore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -18,7 +19,20 @@ import { getTempStatus, TempStatus } from '../../constants/temperature';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useProfilePhoto } from '../../hooks/use-profile-photo';
-import { auth, database } from '../../firebaseConfig';
+import { auth, database, db } from '../../firebaseConfig';
+
+const FARROWING_REMINDER_WINDOW_DAYS = 30;
+
+// new Date("YYYY-MM-DD") parses as UTC midnight, not local midnight -
+// comparing that against local-time day boundaries can be off by hours
+// (enough to shift which day it lands on) depending on the device's
+// timezone. Parse the components and construct via the local-time
+// Date constructor instead, wherever a stored date string needs to be
+// compared against "today."
+const parseISODateLocal = (isoDate: string): Date => {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
 
 const STATUS_GRADIENTS: Record<TempStatus, readonly [string, string]> = {
   offline: ['#C2B9BD', '#948A8E'],
@@ -115,6 +129,7 @@ export default function Dashboard() {
   const firestorePhoto = useProfilePhoto(auth.currentUser?.uid);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [nearestFarrowing, setNearestFarrowing] = useState<{ name: string; date: string } | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -155,11 +170,57 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    // Unfiltered collection listen, same pattern GestationManagement.tsx
+    // already uses - fine at small-farm record counts, but this refetches
+    // every record on every change with no query/pagination. Worth
+    // revisiting (e.g. a where('pregnancyStatus','==','Confirmed') query)
+    // if the collection grows large; not addressing that here.
+    const unsubscribe = onSnapshot(collection(db, 'Gestation_Records'), (snapshot) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const windowEnd = new Date(today);
+      windowEnd.setDate(windowEnd.getDate() + FARROWING_REMINDER_WINDOW_DAYS);
+
+      const upcoming = snapshot.docs
+        .map((docSnap) => docSnap.data())
+        .filter((data) => data.pregnancyStatus === 'Confirmed')
+        .map((data) => ({
+          name: (data.name as string) || 'Unnamed sow',
+          date: data.estimatedFarrowDate as string,
+          // new Date("YYYY-MM-DD") parses as UTC midnight, but `today`/
+          // `windowEnd` above are local-time - on devices ahead/behind
+          // UTC that mismatch can shift a date across the day boundary
+          // by hours, misjudging both "already passed" and the 30-day
+          // cutoff. Parse the components and construct in local time
+          // instead, matching how today/windowEnd were built.
+          parsed: parseISODateLocal(data.estimatedFarrowDate),
+        }))
+        .filter((r) => !isNaN(r.parsed.getTime()) && r.parsed >= today && r.parsed <= windowEnd);
+
+      const nearest = upcoming.reduce<(typeof upcoming)[number] | null>(
+        (best, r) => (!best || r.parsed < best.parsed ? r : best),
+        null
+      );
+
+      setNearestFarrowing(nearest ? { name: nearest.name, date: nearest.date } : null);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const recentNotifications = notifications.slice(0, 3);
   const unreadCount = notifications.filter((n) => n.unread).length;
 
   const formatNotifTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatShortDate = (isoDate: string) => {
+    const date = parseISODateLocal(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   // ESP32-CAM Configurations matching LiveFeed
@@ -339,7 +400,16 @@ export default function Dashboard() {
                 OINK! REMINDER <Text style={styles.userNameText}>{userName}</Text>
               </Text>
               <Text style={styles.farrowingText}>
-                Farrowing Date: <Text style={styles.farrowingDateHighlight}>April 25–27</Text>
+                {nearestFarrowing ? (
+                  <>
+                    {nearestFarrowing.name} — Farrowing{' '}
+                    <Text style={styles.farrowingDateHighlight}>
+                      {formatShortDate(nearestFarrowing.date)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.farrowingDateHighlight}>No upcoming farrowing dates</Text>
+                )}
               </Text>
             </View>
             <View style={styles.radioDot} />
