@@ -41,18 +41,37 @@ export interface GestationRecord {
   overdueDays?: number;
 }
 
+// new Date("YYYY-MM-DD") parses as UTC midnight, not local midnight -
+// same issue fixed in dashboard.tsx. Parse the components and construct
+// via the local-time Date constructor instead.
+const parseISODateLocal = (isoDate: string): Date => {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+// toISOString() converts to UTC on the way out, which would re-introduce
+// the same mismatch in reverse - it shifts dates by a day in positive-
+// UTC-offset zones even when the parse above is done correctly. Format
+// from local getters instead so parse and output use the same clock.
+const toISODateStringLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const calculateFarrowDate = (inseminationDateStr: string): string => {
-  const date = new Date(inseminationDateStr);
+  const date = parseISODateLocal(inseminationDateStr);
   if (isNaN(date.getTime())) return '';
   date.setDate(date.getDate() + 114);
-  return date.toISOString().split('T')[0];
+  return toISODateStringLocal(date);
 };
 
 const calculateMoveDate = (inseminationDateStr: string): string => {
-  const date = new Date(inseminationDateStr);
+  const date = parseISODateLocal(inseminationDateStr);
   if (isNaN(date.getTime())) return '';
   date.setDate(date.getDate() + 107);
-  return date.toISOString().split('T')[0];
+  return toISODateStringLocal(date);
 };
 
 // Masks free digit entry into YYYY-MM-DD as the user types, inserting
