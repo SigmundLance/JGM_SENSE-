@@ -18,6 +18,9 @@ const STATUS_NOTIFICATION_STYLE: Record<TempStatus, { iconColor: string; iconBg:
 // two phones watching the same pen don't each independently notify for
 // the same status transition.
 const LAST_STATUS_PATH = 'notifications_state/lastStatus';
+// Same reasoning as LAST_STATUS_PATH, tracked separately since staleness
+// is an independent concern from the sensor-value status above it.
+const LAST_STALE_PATH = 'notifications_state/lastStale';
 
 // 1. Define the shape of our context data with Firebase properties
 type TempContextType = {
@@ -57,6 +60,10 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   const pendingStatus = useRef<TempStatus | null>(null);
   const pendingCount = useRef(0);
   const lastProcessedAt = useRef<number | null>(null);
+  const lastNotifiedStale = useRef<boolean>(false);
+  // Set true only from the SECOND onValue fire onward - see the comment
+  // at the setLastReadingAt call site below.
+  const hasSeenFirstSnapshot = useRef(false);
 
   // The sensor listener effect below intentionally mounts once ([]), so
   // it can't read isNotificationsEnabled directly without going stale -
@@ -66,6 +73,51 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
     isNotificationsEnabledRef.current = isNotificationsEnabled;
   }, [isNotificationsEnabled]);
 
+  // Fires a notification on a false<->true isStale transition. Compares
+  // against the ref (not React state) so it's independent of render
+  // timing, and is a no-op if nextIsStale matches what was last
+  // notified - that's what stops it refiring on every 30s tick while
+  // still stale. Same push+persist+fireLocalNotification shape as the
+  // sensor-status notifications above, but a separate, independent
+  // concern from that debounce machinery - staleness is already
+  // time-gated by STALE_AFTER_MS itself, so no confirmation-count is
+  // needed on top of it.
+  const notifyStaleTransition = (nextIsStale: boolean) => {
+    if (nextIsStale === lastNotifiedStale.current) return;
+
+    const previousNotifiedStale = lastNotifiedStale.current;
+    lastNotifiedStale.current = nextIsStale;
+
+    const title = nextIsStale ? 'Sensor Offline' : 'Sensor Back Online';
+    const body = nextIsStale
+      ? 'No new temperature readings for 5+ minutes.'
+      : 'Temperature readings have resumed.';
+    const { iconColor, iconBg } = STATUS_NOTIFICATION_STYLE[nextIsStale ? 'offline' : 'optimal'];
+
+    const newNotifRef = push(ref(rtdb, 'notifications'));
+    if (!newNotifRef.key) return;
+
+    update(ref(rtdb), {
+      [`notifications/${newNotifRef.key}`]: {
+        title,
+        body,
+        type: 'Temperature',
+        timestamp: Date.now(),
+        unread: true,
+        iconColor,
+        iconBg,
+      },
+      [LAST_STALE_PATH]: nextIsStale,
+    })
+      .then(() => {
+        fireLocalNotification(isNotificationsEnabledRef.current, title, body);
+      })
+      .catch((error) => {
+        console.error('Failed to create staleness notification:', error);
+        lastNotifiedStale.current = previousNotifiedStale;
+      });
+  };
+
   // Recompute isStale whenever a new reading arrives (clears staleness
   // immediately rather than waiting for the next timer tick below), and
   // keep a ref in sync so the timer can read the latest value without
@@ -73,7 +125,19 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   const lastReadingAtRef = useRef<number | null>(null);
   useEffect(() => {
     lastReadingAtRef.current = lastReadingAt;
-    setIsStale(lastReadingAt !== null && Date.now() - lastReadingAt > STALE_AFTER_MS);
+
+    // lastReadingAt === null means "no confirmed live write observed
+    // yet this session" (see hasSeenFirstSnapshot above) - NOT "not
+    // stale." Skip entirely rather than treat that as evidence of
+    // anything: on a relaunch with the persisted state restored to
+    // "already notified stale," evaluating this as nextIsStale=false
+    // would fire a false "back online" before any real write has
+    // actually been observed this session.
+    if (lastReadingAt === null) return;
+
+    const nextIsStale = Date.now() - lastReadingAt > STALE_AFTER_MS;
+    setIsStale(nextIsStale);
+    notifyStaleTransition(nextIsStale);
   }, [lastReadingAt]);
 
   // Ticks purely from time passing - this is what actually flips
@@ -82,7 +146,11 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   useEffect(() => {
     const interval = setInterval(() => {
       const last = lastReadingAtRef.current;
-      setIsStale(last !== null && Date.now() - last > STALE_AFTER_MS);
+      if (last === null) return; // same reasoning as above
+
+      const nextIsStale = Date.now() - last > STALE_AFTER_MS;
+      setIsStale(nextIsStale);
+      notifyStaleTransition(nextIsStale);
     }, 30000);
 
     return () => clearInterval(interval);
@@ -105,6 +173,18 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
         console.error('Failed to read persisted notification status:', error);
       }
 
+      // Same reasoning as above, for staleness: a relaunch while the
+      // sensor is still offline shouldn't be able to refire "Sensor
+      // Offline" just because this session doesn't remember sending it.
+      try {
+        const staleSnap = await get(ref(rtdb, LAST_STALE_PATH));
+        if (staleSnap.exists()) {
+          lastNotifiedStale.current = Boolean(staleSnap.val());
+        }
+      } catch (error) {
+        console.error('Failed to read persisted stale-notification state:', error);
+      }
+
       if (!isMounted) return;
 
       const sensorRef = ref(rtdb, 'sensors/farrowing');
@@ -119,12 +199,23 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
             setCurrentTemp(nextTemperature);
             setHumidity(data.humidity !== undefined ? Number(data.humidity) : null);
             setTargetTemp(data.targetTemp !== undefined ? Number(data.targetTemp) : TARGET_TEMP);
-            // Any write to this node at all is evidence the device is
-            // alive, even one that duplicate-write filtering below will
-            // skip for notification purposes - that filtering is about
-            // not double-counting a status transition, not about
-            // liveness, so it doesn't gate this.
-            setLastReadingAt(Date.now());
+
+            // onValue always fires once immediately with whatever is
+            // currently cached/stored, the moment a listener attaches -
+            // that includes arbitrarily old data if the device has been
+            // offline since before this fire. That first fire is
+            // ambiguous (could be a live write, could be a stale
+            // replay) and must NOT be counted as evidence of a live
+            // write, or every relaunch would reset the staleness clock
+            // to "just now" regardless of how old the data actually is
+            // - which would make a relaunch while genuinely offline
+            // falsely report as freshly online. Only fires after the
+            // first one are guaranteed to be real changes.
+            if (hasSeenFirstSnapshot.current) {
+              setLastReadingAt(Date.now());
+            } else {
+              hasSeenFirstSnapshot.current = true;
+            }
 
             if (nextTemperature === null || !Number.isFinite(nextTemperature)) {
               return;
