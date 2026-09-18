@@ -129,7 +129,7 @@ export default function TemperatureScreen() {
     if (isStale) {
       const { gradient, dotColor } = STATUS_STYLES.offline;
       return {
-        label: 'Stale',
+        label: 'Offline',
         gradient,
         dotColor,
         humidityDisplay: formattedHumidity,

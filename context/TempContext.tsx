@@ -211,6 +211,22 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
             // - which would make a relaunch while genuinely offline
             // falsely report as freshly online. Only fires after the
             // first one are guaranteed to be real changes.
+            //
+            // KNOWN LIMITATION: this means staleness can only be
+            // detected for a sensor that goes offline *during* an
+            // active session - a sensor that was ALREADY offline
+            // before the app was opened will never get a second fire
+            // to establish a baseline, so lastReadingAt stays null and
+            // isStale stays false for the entire session, even though
+            // the sensor may have been dead for hours or days. In that
+            // case the last real reading just displays as if current
+            // (e.g. a stale "Warning"/fault status shows confidently,
+            // with no stale indicator). There's no way to fix this
+            // from the client alone - sensors/farrowing has no
+            // timestamp field, so the app has no way to tell "this
+            // cached value is old" from "this cached value is fresh"
+            // on the very first fire. A real fix needs the ESP32
+            // firmware to write its own timestamp into the payload.
             if (hasSeenFirstSnapshot.current) {
               setLastReadingAt(Date.now());
             } else {
