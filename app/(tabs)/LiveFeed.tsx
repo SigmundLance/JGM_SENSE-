@@ -31,7 +31,7 @@ export default function LiveFeedScreen() {
     id: 'farrowing',
     title: 'Farrowing Area',
     penId: 'Pen 01',
-    ipAddress: '192.168.1.179',
+    ipAddress: '192.168.0.213',
     streamPort: 80,
   };
 
@@ -39,7 +39,7 @@ export default function LiveFeedScreen() {
     id: 'brooding',
     title: 'Brooding Area',
     penId: 'Pen 02',
-    ipAddress: '192.168.1.101',
+    ipAddress: '192.168.1.213',
     streamPort: 80,
   };
 
