@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getTempStatus, OPTIMAL_MAX, OPTIMAL_MIN, TempStatus } from '../../constants/temperature';
+import { getTempStatus, OPTIMAL_MAX, OPTIMAL_MIN, TARGET_TEMP, TempStatus } from '../../constants/temperature';
 import { useNotificationPreference } from '../../context/NotificationPreferenceContext';
 import { useTemp } from '../../context/TempContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -23,6 +23,9 @@ import { fireLocalNotification } from '../../utils/localNotifications';
 // Distinct from every color used for temperature-status alerts
 // (red/critical, amber/fault, blue/cooling, green/optimal).
 const OVERRIDE_NOTIF_STYLE = { iconColor: '#7C5CFC', iconBg: '#F1EEFF' };
+
+const clampToSafeRange = (value: number): number =>
+  Math.min(OPTIMAL_MAX, Math.max(OPTIMAL_MIN, value));
 
 const STATUS_STYLES: Record<TempStatus, { gradient: readonly [string, string]; dotColor: string }> = {
   offline: { gradient: ['#C2B9BD', '#948A8E'], dotColor: '#F2EEEE' },
@@ -46,8 +49,8 @@ export default function TemperatureScreen() {
   const { currentTemp, humidity, targetTemp: initialTarget, updateTemperature } = useTemp();
   const { isNotificationsEnabled } = useNotificationPreference();
 
-  const [targetTemp, setTargetTemp] = useState<number>(initialTarget ?? 32);
-  const [savedTargetTemp, setSavedTargetTemp] = useState<number>(initialTarget ?? 32);
+  const [targetTemp, setTargetTemp] = useState<number>(clampToSafeRange(initialTarget ?? TARGET_TEMP));
+  const [savedTargetTemp, setSavedTargetTemp] = useState<number>(clampToSafeRange(initialTarget ?? TARGET_TEMP));
   const [isUpdating, setIsUpdating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
@@ -56,11 +59,20 @@ export default function TemperatureScreen() {
 
   const [tempSelectedArea, setTempSelectedArea] = useState<string>('1');
 
-  // Sync state if initialTarget is fetched after component mounts
+  // Sync state if initialTarget is fetched after component mounts.
+  // Clamped for display only - if Firebase holds a stored target outside
+  // Safe Range (this has happened: a live target of 21°C was observed
+  // during development), this makes the UI never show or let the user
+  // step from an out-of-range value, but it does NOT correct Firebase.
+  // savedTargetTemp becomes the clamped value too, so hasChanges stays
+  // false and nothing gets written back until the user actually adjusts
+  // and confirms - known gap: the real stored value can silently diverge
+  // from what's displayed until that happens.
   useEffect(() => {
     if (initialTarget !== undefined && initialTarget !== null) {
-      setTargetTemp(initialTarget);
-      setSavedTargetTemp(initialTarget);
+      const clamped = clampToSafeRange(initialTarget);
+      setTargetTemp(clamped);
+      setSavedTargetTemp(clamped);
     }
   }, [initialTarget]);
 
@@ -77,6 +89,8 @@ export default function TemperatureScreen() {
   }, [currentTemp]);
 
   const hasChanges = targetTemp !== savedTargetTemp;
+  const isAtMin = targetTemp <= OPTIMAL_MIN;
+  const isAtMax = targetTemp >= OPTIMAL_MAX;
 
   // Calculate required lamp boost based on realtime currentTemp vs target
   const heatNeeded = useMemo(() => {
@@ -117,7 +131,7 @@ export default function TemperatureScreen() {
   }, [currentTemp, humidity, lastUpdated]);
 
   const handleAdjust = (type: 'up' | 'down') => {
-    setTargetTemp((prev) => (type === 'up' ? prev + 1 : prev - 1));
+    setTargetTemp((prev) => clampToSafeRange(type === 'up' ? prev + 1 : prev - 1));
   };
 
   const cancelChanges = () => {
@@ -252,9 +266,10 @@ export default function TemperatureScreen() {
 
           <View style={styles.controlsRow}>
             <TouchableOpacity
-              style={styles.stepperBtn}
+              style={[styles.stepperBtn, isAtMin && { opacity: 0.4 }]}
               onPress={() => handleAdjust('down')}
               activeOpacity={0.7}
+              disabled={isAtMin}
             >
               <Ionicons name="remove" size={24} color="#FF6B81" />
             </TouchableOpacity>
@@ -265,9 +280,10 @@ export default function TemperatureScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.stepperBtn}
+              style={[styles.stepperBtn, isAtMax && { opacity: 0.4 }]}
               onPress={() => handleAdjust('up')}
               activeOpacity={0.7}
+              disabled={isAtMax}
             >
               <Ionicons name="add" size={24} color="#FF6B81" />
             </TouchableOpacity>
