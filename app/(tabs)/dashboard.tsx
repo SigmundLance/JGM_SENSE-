@@ -236,7 +236,7 @@ export default function Dashboard() {
     id: 'farrowing',
     title: 'Farrowing Area',
     penId: 'Pen 01',
-    ipAddress: '192.168.1.179', // Matched with LiveFeed Screen IP
+    ipAddress: '192.168.0.213', // Matched with LiveFeed Screen IP
     streamPort: 80,
   };
 
@@ -244,7 +244,7 @@ export default function Dashboard() {
     id: 'brooding',
     title: 'Brooding Area',
     penId: 'Pen 02',
-    ipAddress: '192.168.1.101', // Matched with LiveFeed Screen IP
+    ipAddress: '192.168.1.213', // Matched with LiveFeed Screen IP
     streamPort: 80,
   };
 
