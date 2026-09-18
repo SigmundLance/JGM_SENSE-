@@ -1,6 +1,6 @@
 import { get, onValue, push, ref, set, update } from 'firebase/database';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { DUPLICATE_WRITE_GRACE_MS, getTempStatus, STATUS_CONFIRMATION_READINGS, TARGET_TEMP, TempStatus } from '../constants/temperature';
+import { DUPLICATE_WRITE_GRACE_MS, getTempStatus, STALE_AFTER_MS, STATUS_CONFIRMATION_READINGS, TARGET_TEMP, TempStatus } from '../constants/temperature';
 import { rtdb } from '../firebaseConfig';
 import { fireLocalNotification } from '../utils/localNotifications';
 import { useNotificationPreference } from './NotificationPreferenceContext';
@@ -24,6 +24,18 @@ type TempContextType = {
   currentTemp: number | null;
   humidity: number | null;
   targetTemp: number | null;
+  // When the sensor node was last observed to write anything at all
+  // (not just a valid currentTemp) - null until the first reading ever
+  // arrives. Distinct from "isStale": a device that's never connected
+  // has lastReadingAt === null and isStale === false, since there's no
+  // baseline yet to call stale - that case is already covered by
+  // currentTemp being null (getTempStatus returns 'offline' for it).
+  lastReadingAt: number | null;
+  // True once more than STALE_AFTER_MS has passed since lastReadingAt -
+  // i.e. we have a real last-known reading, but it's too old to trust
+  // as "current." Ticks on its own via a timer, independent of new data
+  // arriving, so it flips true purely from time passing.
+  isStale: boolean;
   updateTemperature: (newTarget: number) => Promise<void>;
 };
 
@@ -35,6 +47,8 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
   const [humidity, setHumidity] = useState<number | null>(null);
   const [targetTemp, setTargetTemp] = useState<number | null>(TARGET_TEMP);
+  const [lastReadingAt, setLastReadingAt] = useState<number | null>(null);
+  const [isStale, setIsStale] = useState(false);
   const { isNotificationsEnabled } = useNotificationPreference();
 
   // Status-transition debounce state. Refs so updates don't trigger
@@ -51,6 +65,28 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   useEffect(() => {
     isNotificationsEnabledRef.current = isNotificationsEnabled;
   }, [isNotificationsEnabled]);
+
+  // Recompute isStale whenever a new reading arrives (clears staleness
+  // immediately rather than waiting for the next timer tick below), and
+  // keep a ref in sync so the timer can read the latest value without
+  // restarting itself on every reading.
+  const lastReadingAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    lastReadingAtRef.current = lastReadingAt;
+    setIsStale(lastReadingAt !== null && Date.now() - lastReadingAt > STALE_AFTER_MS);
+  }, [lastReadingAt]);
+
+  // Ticks purely from time passing - this is what actually flips
+  // isStale to true when the device goes silent, since no new RTDB
+  // event will ever arrive to trigger the effect above in that case.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const last = lastReadingAtRef.current;
+      setIsStale(last !== null && Date.now() - last > STALE_AFTER_MS);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -83,6 +119,12 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
             setCurrentTemp(nextTemperature);
             setHumidity(data.humidity !== undefined ? Number(data.humidity) : null);
             setTargetTemp(data.targetTemp !== undefined ? Number(data.targetTemp) : TARGET_TEMP);
+            // Any write to this node at all is evidence the device is
+            // alive, even one that duplicate-write filtering below will
+            // skip for notification purposes - that filtering is about
+            // not double-counting a status transition, not about
+            // liveness, so it doesn't gate this.
+            setLastReadingAt(Date.now());
 
             if (nextTemperature === null || !Number.isFinite(nextTemperature)) {
               return;
@@ -190,7 +232,9 @@ export const TemperatureProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   return (
-    <TempContext.Provider value={{ currentTemp, humidity, targetTemp, updateTemperature }}>
+    <TempContext.Provider
+      value={{ currentTemp, humidity, targetTemp, lastReadingAt, isStale, updateTemperature }}
+    >
       {children}
     </TempContext.Provider>
   );

@@ -46,14 +46,17 @@ const BROODING_AREAS = [
 export default function TemperatureScreen() {
   const { theme } = useTheme();
   // Extracted targetTemp and humidity from useTemp context
-  const { currentTemp, humidity, targetTemp: initialTarget, updateTemperature } = useTemp();
+  const { currentTemp, humidity, targetTemp: initialTarget, isStale, updateTemperature } = useTemp();
   const { isNotificationsEnabled } = useNotificationPreference();
 
   const [targetTemp, setTargetTemp] = useState<number>(clampToSafeRange(initialTarget ?? TARGET_TEMP));
   const [savedTargetTemp, setSavedTargetTemp] = useState<number>(clampToSafeRange(initialTarget ?? TARGET_TEMP));
   const [isUpdating, setIsUpdating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string>('Just now');
+  // Just the formatted time (e.g. "09:58") - the sentence wrapping it
+  // ("Last Updated: " vs "No data since ") depends on isStale, built in
+  // statusConfig below.
+  const [lastUpdated, setLastUpdated] = useState<string>('');
   const [selectedArea, setSelectedArea] = useState<string>('1');
   const [areaModalVisible, setAreaModalVisible] = useState(false);
 
@@ -84,7 +87,7 @@ export default function TemperatureScreen() {
         hour: '2-digit',
         minute: '2-digit',
       });
-      setLastUpdated(`Last Updated: ${timeString}`);
+      setLastUpdated(timeString);
     }
   }, [currentTemp]);
 
@@ -101,9 +104,9 @@ export default function TemperatureScreen() {
 
   const statusConfig = useMemo(() => {
     const { status, label } = getTempStatus(currentTemp);
-    const { gradient, dotColor } = STATUS_STYLES[status];
 
     if (status === 'offline') {
+      const { gradient, dotColor } = STATUS_STYLES.offline;
       return {
         label,
         gradient,
@@ -119,16 +122,34 @@ export default function TemperatureScreen() {
       typeof currentTemp === 'number' ? currentTemp.toFixed(1) : currentTemp;
     const formattedHumidity = humidity !== null && humidity !== undefined ? `${humidity}%` : '--%';
 
+    // A reading exists, but it's too old to trust as current - keep
+    // showing the last-known numbers (still informative), but override
+    // the status entirely rather than let a stale reading display as a
+    // confident Optimal/Warning/Critical label.
+    if (isStale) {
+      const { gradient, dotColor } = STATUS_STYLES.offline;
+      return {
+        label: 'Stale',
+        gradient,
+        dotColor,
+        humidityDisplay: formattedHumidity,
+        tempDisplay: `${formattedTemp}°C`,
+        updatedText: lastUpdated ? `No data since ${lastUpdated}` : 'No recent data',
+        isOnline: false,
+      };
+    }
+
+    const { gradient, dotColor } = STATUS_STYLES[status];
     return {
       label,
       gradient,
       dotColor,
       humidityDisplay: formattedHumidity,
       tempDisplay: `${formattedTemp}°C`,
-      updatedText: lastUpdated,
+      updatedText: lastUpdated ? `Last Updated: ${lastUpdated}` : 'Just now',
       isOnline: true,
     };
-  }, [currentTemp, humidity, lastUpdated]);
+  }, [currentTemp, humidity, lastUpdated, isStale]);
 
   const handleAdjust = (type: 'up' | 'down') => {
     setTargetTemp((prev) => clampToSafeRange(type === 'up' ? prev + 1 : prev - 1));

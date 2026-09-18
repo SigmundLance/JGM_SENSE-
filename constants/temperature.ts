@@ -26,6 +26,15 @@ export const STATUS_CONFIRMATION_READINGS = 3;
 // duplicate writes themselves are still happening at the source.
 export const DUPLICATE_WRITE_GRACE_MS = 2000;
 
+// How long without any write to sensors/farrowing before the last known
+// reading is treated as stale rather than current. There is no
+// timestamp in the sensor payload itself (confirmed against live data),
+// so this is measured client-side from when onValue last fired. Chosen
+// to tolerate normal gaps between readings (observed live data showed
+// ~15s-3min between distinct samples) while still catching a dead
+// device reasonably promptly - not tuned against real outage data.
+export const STALE_AFTER_MS = 5 * 60 * 1000;
+
 // 'fault' is an equipment-failure indicator (suspected heat lamp or
 // component failure), not a severity rung between 'critical' and
 // 'cooling'/'warming'. Don't treat this type as an ordered scale -

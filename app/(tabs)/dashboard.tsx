@@ -128,7 +128,7 @@ const getStreamHtml = (ipAddress: string, streamPort: number) => {
 
 export default function Dashboard() {
   const { theme, isDarkModeEnabled } = useTheme();
-  const { currentTemp } = useTemp();
+  const { currentTemp, isStale } = useTemp();
   const router = useRouter();
   const [userName, setUserName] = useState(auth.currentUser?.displayName || "Ashley");
   const [userPhoto, setUserPhoto] = useState<string | null>(auth.currentUser?.photoURL ?? null);
@@ -261,10 +261,12 @@ export default function Dashboard() {
   );
 
   const tempStatus = getTempStatus(currentTemp);
-  const status = {
-    label: tempStatus.label.toUpperCase(),
-    gradient: STATUS_GRADIENTS[tempStatus.status],
-  };
+  // A stale reading overrides whatever the last real status was - same
+  // reasoning as Temperature.tsx: don't let an old number display as a
+  // confident current status.
+  const status = isStale && tempStatus.status !== 'offline'
+    ? { label: 'STALE', gradient: STATUS_GRADIENTS.offline }
+    : { label: tempStatus.label.toUpperCase(), gradient: STATUS_GRADIENTS[tempStatus.status] };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background || '#FFF0F3' }}>
